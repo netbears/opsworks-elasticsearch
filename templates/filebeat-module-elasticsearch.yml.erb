@@ -1,0 +1,35 @@
+# Module: elasticsearch
+# Docs: https://www.elastic.co/guide/en/beats/filebeat/7.2/filebeat-module-elasticsearch.html
+
+- module: elasticsearch
+  server:
+    enabled: true
+    var.paths:
+      - <%= node['elasticsearch']['log_path'] %>/*.log
+      - <%= node['elasticsearch']['log_path'] %>/*_server.json
+
+  gc:
+    enabled: true
+    var.paths:
+      - <%= node['elasticsearch']['log_path'] %>/gc.log.[0-9]*
+      - <%= node['elasticsearch']['log_path'] %>/gc.log
+
+  audit:
+    enabled: true
+    var.paths:
+      - <%= node['elasticsearch']['log_path'] %>/*_access.log  # Plain text logs
+      - <%= node['elasticsearch']['log_path'] %>/*_audit.json  # JSON logs
+
+  slowlog:
+    enabled: true
+    var.paths:
+      - <%= node['elasticsearch']['log_path'] %>/*_index_search_slowlog.log     # Plain text logs
+      - <%= node['elasticsearch']['log_path'] %>/*_index_indexing_slowlog.log   # Plain text logs
+      - <%= node['elasticsearch']['log_path'] %>/*_index_search_slowlog.json    # JSON logs
+      - <%= node['elasticsearch']['log_path'] %>/*_index_indexing_slowlog.json  # JSON logs
+
+  deprecation:
+    enabled: true
+    var.paths:
+      - <%= node['elasticsearch']['log_path'] %>/*_deprecation.log   # Plain text logs
+      - <%= node['elasticsearch']['log_path'] %>/*_deprecation.json  # JSON logs

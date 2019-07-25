@@ -1,0 +1,17 @@
+#!/bin/bash
+
+set -e
+
+bucket=$(curl -X GET "<%= @private_ip %>:9200/_snapshot" -H 'Content-Type: application/json')
+hostname=$(hostname)
+date=$(date +%Y-%m-%d)
+
+if [[ $bucket == *"<%= node['elasticsearch']['bucket_snapshot_name'] %>"* ]]; then
+  echo "Repository already created. Skipping this step..."
+else
+  curl  -X PUT "<%= @private_ip %>:9200/_snapshot/<%= node['elasticsearch']['cluster_name'] %>" \
+        -H 'Content-Type: application/json' \
+        -d'{"type":"s3","settings":{"bucket":"<%= node['elasticsearch']['bucket_snapshot_name'] %>","base_path":"<%= node['elasticsearch']['cluster_name'] %>"}}'
+fi
+
+curl -XPUT "http://<%= @private_ip %>:9200/_snapshot/<%= node['elasticsearch']['cluster_name'] %>/${hostname}-${date}?wait_for_completion=true"

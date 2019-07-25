@@ -1,0 +1,13 @@
+#!/bin/bash
+
+data=$(file -s /dev/nvme0n1)
+
+if [ "$data" = "/dev/nvme0n1: data" ]; then
+  echo "New instance detected. Creating file system."
+  mkfs -t ext4 /dev/nvme0n1
+  mount /dev/nvme0n1 <%= node['elasticsearch']['data_path'] %>
+  echo "/dev/nvme0n1 <%= node['elasticsearch']['data_path'] %> ext4 defaults,nofail 0 2" >> /etc/fstab
+  chown -R elasticsearch:elasticsearch <%= node['elasticsearch']['data_path'] %>
+else
+  echo "Existing instance detected. Skipping SSD setup."
+fi

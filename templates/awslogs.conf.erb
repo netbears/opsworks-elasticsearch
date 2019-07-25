@@ -1,0 +1,13 @@
+[general]
+state_file = /var/awslogs/etc/agent-state
+region = <%= node['cloudwatch']['region'] %>
+
+[/var/log/elasticsearch]
+datetime_format = %b %d %H:%M:%S
+file = <%= node['elasticsearch']['log_path'] %>/*.log
+buffer_duration = 5000
+log_stream_name = <%= @private_ip %>
+initial_position = start_of_file
+log_group_name = <%= node['cloudwatch']['group'] %>
+
+

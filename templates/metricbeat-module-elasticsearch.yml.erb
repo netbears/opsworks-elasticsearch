@@ -1,0 +1,11 @@
+# Module: elasticsearch
+# Docs: https://www.elastic.co/guide/en/beats/metricbeat/7.2/metricbeat-module-elasticsearch.html
+
+- module: elasticsearch
+  #metricsets:
+  #  - node
+  #  - node_stats
+  period: 10s
+  hosts: ["http://<%= @private_ip %>:<%= node['elasticsearch']['http_port'] %>"]
+  #username: "user"
+  #password: "secret"
