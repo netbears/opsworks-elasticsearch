@@ -142,7 +142,7 @@ The `master` recipe is `libraries/setup.rb` and contains the flow to launch all 
 * Include that file within `libraries/setup.rb` with format `include_recipe 'elasticsearch_stack::my_new_recipe'`
 * Update the revision reference within `metadata.rb`, `Berksfile.lock` and include a definition within `CHANGELOG.md`
 * Git commit, push and tag your revision
-* Run the makefile using `make release`
+* Run the `berks package` command and upload it to an HTTP location
 * Update the correct CloudFormation stack
 
 ### Deploy new recipe to stack
@@ -166,6 +166,7 @@ The stack pushes all ElasticSearch logs within to fluentd and then they are stor
 ## Initial deploy method
 
 * Go to CloudFormation and launch the stack. The default parameters work just fine, but you might want to tweak them for all intents and purposes
+* Initially, 3 nodes will be deployed in the newly created private subnets
 
 
 ## Notes

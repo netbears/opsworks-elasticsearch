@@ -3,13 +3,9 @@ Description: Launch ElasticSearch opsworks stack within its own VPC
 Parameters:
   
   #ElasticSearch
-  RepositoryUrl:
+  CookbookUrl:
     Type: String
-    Default: 'https://github.com/netbears/opsworks-elasticsearch.git'
-
-  RepositoryRevision:
-    Type: String
-    Default: 'master'
+    Default: 'https://github.com/netbears/opsworks-elasticsearch/releases/download/v1.0.0/cookbooks-v1.0.0.tar.gz'
 
   ClusterName:
     Type: String
@@ -29,6 +25,26 @@ Parameters:
     AllowedValues:
       - internal
       - external
+
+  NumberOfNodes:
+    Type: Number
+    Default: '3'
+
+  InstanceType:
+    Type: String
+    Default: 'i3.large'
+    AllowedValues:
+    - i3.large
+    - i3.xlarge
+    - i3.2xlarge
+    - i3.4xlarge
+    - i3.8xlarge
+    - i3.16xlarge
+
+  InstanceRootVolumeSize:
+    Type: String
+    Default: '50'
+    Description: Size in GB of the root volume
 
   # Subnets
   VPCSubnetCidrBlock:
@@ -287,11 +303,9 @@ Resources:
         Version: '12'
       UseCustomCookbooks: true
       CustomCookbooksSource:
-        Type: git
-        Revision:
-          Ref: RepositoryRevision
+        Type: archive
         Url:
-          Ref: RepositoryUrl
+          Ref: CookbookUrl
       DefaultSubnetId:
         Ref: PrivateSubnet1
       VpcId:
@@ -306,7 +320,8 @@ Resources:
               "region": "${AWS::Region}",
               "cluster_name": "${ClusterName}",
               "discovery_ec2_groups": "${Ec2SecurityGroup.GroupId}",
-              "bucket_snapshot_name": "${SnapshotBucketName}"
+              "bucket_snapshot_name": "${SnapshotBucketName}",
+              "cluster_initial_master_nodes": "elasticsearch-initial-1"
             },
             "cloudwatch": {
               "region": "${AWS::Region}"
@@ -398,6 +413,69 @@ Resources:
         Ref: Elb
       LayerId: 
         Ref: Layer
+
+  InstanceId1: 
+    Type: AWS::OpsWorks::Instance
+    DependsOn: PrivateRoute
+    Properties: 
+      StackId: 
+        Ref: OpsWorksStack
+      LayerIds: 
+        - Ref: Layer
+      InstanceType:
+        Ref: InstanceType
+      RootDeviceType: ebs
+      SubnetId:
+        Ref: PrivateSubnet1
+      Hostname: elasticsearch-initial-1
+      BlockDeviceMappings:
+        - DeviceName: ROOT_DEVICE
+          Ebs:
+            VolumeType: gp2
+            VolumeSize:
+              Ref: InstanceRootVolumeSize
+
+  InstanceId2:
+    Type: AWS::OpsWorks::Instance
+    DependsOn: PrivateRoute
+    Properties: 
+      StackId: 
+        Ref: OpsWorksStack
+      LayerIds: 
+        - Ref: Layer
+      InstanceType:
+        Ref: InstanceType
+      RootDeviceType: ebs
+      SubnetId:
+        Ref: PrivateSubnet2
+      Hostname: elasticsearch-initial-2
+      BlockDeviceMappings:
+        - DeviceName: ROOT_DEVICE
+          Ebs:
+            VolumeType: gp2
+            VolumeSize:
+              Ref: InstanceRootVolumeSize
+
+  InstanceId3:
+    Type: AWS::OpsWorks::Instance
+    DependsOn: PrivateRoute
+    Properties: 
+      StackId: 
+        Ref: OpsWorksStack
+      LayerIds: 
+        - Ref: Layer
+      InstanceType:
+        Ref: InstanceType
+      RootDeviceType: ebs
+      SubnetId:
+        Ref: PrivateSubnet2
+      Hostname: elasticsearch-initial-3
+      BlockDeviceMappings:
+        - DeviceName: ROOT_DEVICE
+          Ebs:
+            VolumeType: gp2
+            VolumeSize:
+              Ref: InstanceRootVolumeSize
 
   VPC:
     Type: AWS::EC2::VPC
@@ -798,10 +876,14 @@ Metadata:
     - Label:
         default: ElasticSearch
       Parameters:
-      - Revision
       - ClusterName
       - OpsWorksStackName
       - SnapshotBucketName
+      - LoadBalancerType
+      - NumberOfNodes
+      - InstanceType
+      - InstanceRootVolumeSize
+      - CookbookUrl
     - Label:
         default: Remote Access
       Parameters:
