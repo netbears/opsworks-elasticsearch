@@ -26,6 +26,14 @@ Parameters:
       - internal
       - external
 
+  HostType:
+    Type: String
+    Default: private-ip
+    AllowedValues:
+      - private-ip
+      - public-ip
+    Description: It is recommended to not use public IPs for hosts, but you have the option to use public IPs as well if needed
+
   NumberOfNodes:
     Type: Number
     Default: '3'
@@ -174,6 +182,11 @@ Conditions:
     Fn::Equals:
       - Ref: NewVpc
       - new
+
+  PublicHosts:
+    Fn::Equals:
+      - Ref: HostType
+      - public-ip
 
 Resources:
   ServiceRole:
@@ -435,7 +448,11 @@ Resources:
       Type: custom
       EnableAutoHealing: 'false'
       AutoAssignElasticIps: 'false'
-      AutoAssignPublicIps: 'false'
+      AutoAssignPublicIps:
+        Fn::If:
+          - PublicHosts
+          - 'true'
+          - 'false'
       StackId:
         Ref: OpsWorksStack
       CustomRecipes:
@@ -1130,6 +1147,7 @@ Metadata:
       - VpcId
       - SubnetIdHost
       - SubnetIdLoadBalancer
+      - HostType
 
     - Label:
         default: Remote Access
