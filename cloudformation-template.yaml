@@ -1,4 +1,4 @@
-Description: Launch ElasticSearch opsworks stack within its own VPC
+Description: Launch ElasticSearch opsworks stack within its own VPC or an existing VPC
 
 Parameters:
   
@@ -45,6 +45,26 @@ Parameters:
     Type: String
     Default: '50'
     Description: Size in GB of the root volume
+
+  NewVpc:
+    Type: String
+    Default: new
+    AllowedValues:
+      - new
+      - existing
+    Description: If "new", CF will provision all necessary VPC settings and launch the stack in the new VPC
+
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: Setting takes effect only if NewVpc is set to "existing"
+
+  SubnetIdHost:
+    Type: AWS::EC2::Subnet::Id
+    Description: Setting takes effect only if NewVpc is set to "existing"
+
+  SubnetIdLoadBalancer:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: Setting takes effect only if CreateVpc is set to "existing" (specify at least 2)
 
   # Subnets
   VPCSubnetCidrBlock:
@@ -150,6 +170,11 @@ Conditions:
       - Ref: LoadBalancerType
       - external
 
+  CreateVpc:
+    Fn::Equals:
+      - Ref: NewVpc
+      - new
+
 Resources:
   ServiceRole:
     Type: AWS::IAM::Role
@@ -236,7 +261,10 @@ Resources:
       GroupDescription:
         Fn::Sub: ${AWS::StackName}-Sg
       VpcId:
-        Ref: VPC
+        Fn::If:
+          - CreateVpc
+          - Ref: VPC
+          - Ref: VpcId
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 0
@@ -253,7 +281,10 @@ Resources:
       GroupDescription:
         Fn::Sub: ${AWS::StackName}-Sg
       VpcId:
-        Ref: VPC
+        Fn::If:
+          - CreateVpc
+          - Ref: VPC
+          - Ref: VpcId
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 80
@@ -307,9 +338,15 @@ Resources:
         Url:
           Ref: CookbookUrl
       DefaultSubnetId:
-        Ref: PrivateSubnet1
+        Fn::If:
+          - CreateVpc
+          - Ref: PrivateSubnet1
+          - Ref: SubnetIdHost
       VpcId:
-        Ref: VPC
+        Fn::If:
+          - CreateVpc
+          - Ref: VPC
+          - Ref: VpcId
       UseOpsworksSecurityGroups: true
       DefaultOs: Ubuntu 18.04 LTS
       DefaultRootDeviceType: ebs
@@ -373,15 +410,18 @@ Resources:
       - Ref: AlbSecurityGroup
       Subnets:
         Fn::If:
-          - IsExternal
-          - 
-            - Ref: PublicSubnet1
-            - Ref: PublicSubnet2
-            - Ref: PublicSubnet3
-          - 
-            - Ref: PrivateSubnet1
-            - Ref: PrivateSubnet2
-            - Ref: PrivateSubnet3
+          - CreateVpc
+          - Fn::If:
+            - IsExternal
+            - 
+              - Ref: PublicSubnet1
+              - Ref: PublicSubnet2
+              - Ref: PublicSubnet3
+            - 
+              - Ref: PrivateSubnet1
+              - Ref: PrivateSubnet2
+              - Ref: PrivateSubnet3
+          - Ref: SubnetIdLoadBalancer
       LBCookieStickinessPolicy:
         - CookieExpirationPeriod: 600
           PolicyName:
@@ -416,7 +456,7 @@ Resources:
 
   InstanceId1: 
     Type: AWS::OpsWorks::Instance
-    DependsOn: PrivateRoute
+    DependsOn: Elb
     Properties: 
       StackId: 
         Ref: OpsWorksStack
@@ -426,7 +466,10 @@ Resources:
         Ref: InstanceType
       RootDeviceType: ebs
       SubnetId:
-        Ref: PrivateSubnet1
+        Fn::If:
+          - CreateVpc
+          - Ref: PrivateSubnet1
+          - Ref: SubnetIdHost
       Hostname: elasticsearch-initial-1
       BlockDeviceMappings:
         - DeviceName: ROOT_DEVICE
@@ -437,7 +480,7 @@ Resources:
 
   InstanceId2:
     Type: AWS::OpsWorks::Instance
-    DependsOn: PrivateRoute
+    DependsOn: Elb
     Properties: 
       StackId: 
         Ref: OpsWorksStack
@@ -447,7 +490,10 @@ Resources:
         Ref: InstanceType
       RootDeviceType: ebs
       SubnetId:
-        Ref: PrivateSubnet2
+        Fn::If:
+          - CreateVpc
+          - Ref: PrivateSubnet2
+          - Ref: SubnetIdHost
       Hostname: elasticsearch-initial-2
       BlockDeviceMappings:
         - DeviceName: ROOT_DEVICE
@@ -458,7 +504,7 @@ Resources:
 
   InstanceId3:
     Type: AWS::OpsWorks::Instance
-    DependsOn: PrivateRoute
+    DependsOn: Elb
     Properties: 
       StackId: 
         Ref: OpsWorksStack
@@ -468,7 +514,10 @@ Resources:
         Ref: InstanceType
       RootDeviceType: ebs
       SubnetId:
-        Ref: PrivateSubnet2
+        Fn::If:
+          - CreateVpc
+          - Ref: PrivateSubnet3
+          - Ref: SubnetIdHost
       Hostname: elasticsearch-initial-3
       BlockDeviceMappings:
         - DeviceName: ROOT_DEVICE
@@ -478,62 +527,92 @@ Resources:
               Ref: InstanceRootVolumeSize
 
   VPC:
+    Condition: CreateVpc
     Type: AWS::EC2::VPC
     Properties:
       EnableDnsSupport: 'true'
       EnableDnsHostnames: 'true'
-      CidrBlock: !Ref VPCSubnetCidrBlock
+      CidrBlock:
+        Ref: VPCSubnetCidrBlock
       Tags:
       - Key: Name
-        Value: !Ref "AWS::StackName"
+        Value:
+          Ref: "AWS::StackName"
+
   PublicSubnet1:
+    Condition: CreateVpc
     Type: AWS::EC2::Subnet
     DependsOn: VPC
     Properties:
-      VpcId: !Ref VPC
-      AvailabilityZone: !Join [ "", [ !Ref "AWS::Region", !Ref AvailabilityZone1 ] ]
+      VpcId:
+        Ref: VPC
+      AvailabilityZone:
+        Fn::Sub: "${AWS::Region}${AvailabilityZone1}"
       MapPublicIpOnLaunch: true
-      CidrBlock: !Ref PublicSubnetCidrBlock1
+      CidrBlock:
+        Ref: PublicSubnetCidrBlock1
       Tags:
       - Key: Name
-        Value: !Join [ "", [ !Ref "AWS::StackName", "-public-az1" ] ]
+        Value:
+          Fn::Sub: "${AWS::StackName}-publiz-az1"
+
   PublicSubnet2:
+    Condition: CreateVpc
     Type: AWS::EC2::Subnet
     DependsOn: VPC
     Properties:
-      VpcId: !Ref VPC
-      AvailabilityZone: !Join [ "", [ !Ref "AWS::Region", !Ref AvailabilityZone2 ] ]
+      VpcId:
+        Ref: VPC
+      AvailabilityZone:
+        Fn::Sub: "${AWS::Region}${AvailabilityZone2}"
       MapPublicIpOnLaunch: true
-      CidrBlock: !Ref PublicSubnetCidrBlock2
+      CidrBlock:
+        Ref: PublicSubnetCidrBlock2
       Tags:
       - Key: Name
-        Value: !Join [ "", [ !Ref "AWS::StackName", "-public-az2" ] ]
+        Value:
+          Fn::Sub: "${AWS::StackName}-public-az2"
+
   PublicSubnet3:
+    Condition: CreateVpc
     Type: AWS::EC2::Subnet
     DependsOn: VPC
     Properties:
-      VpcId: !Ref VPC
-      AvailabilityZone: !Join [ "", [ !Ref "AWS::Region", !Ref AvailabilityZone3 ] ]
+      VpcId:
+        Ref: VPC
+      AvailabilityZone:
+        Fn::Sub: "${AWS::Region}${AvailabilityZone3}"
       MapPublicIpOnLaunch: true
-      CidrBlock: !Ref PublicSubnetCidrBlock3
+      CidrBlock:
+        Ref: PublicSubnetCidrBlock3
       Tags:
       - Key: Name
-        Value: !Join [ "", [ !Ref "AWS::StackName", "-public-az3" ] ]
+        Value:
+          Fn::Sub: "${AWS::StackName}-public-az3"
+
   InternetGateway:
+    Condition: CreateVpc
     Type: AWS::EC2::InternetGateway
     Properties:
       Tags:
       - Key: Name
-        Value: !Ref "AWS::StackName"
+        Value:
+          Fn::Sub: "${AWS::StackName}-InternetGateway"
+
   GatewayToInternet:
+    Condition: CreateVpc
     Type: AWS::EC2::VPCGatewayAttachment
     DependsOn:
     - InternetGateway
     - VPC
     Properties:
-      VpcId: !Ref VPC
-      InternetGatewayId: !Ref InternetGateway
+      VpcId:
+        Ref: VPC
+      InternetGatewayId:
+        Ref: InternetGateway
+
   NatGateway:
+    Condition: CreateVpc
     Type: AWS::EC2::NatGateway
     DependsOn: GatewayToInternet
     Properties:
@@ -545,93 +624,140 @@ Resources:
         Ref: PublicSubnet1
       Tags:
       - Key: Name
-        Value: NatGateway    
+        Value:
+          Fn::Sub: "${AWS::StackName}-NatGateway"
+
   EIP:
+    Condition: CreateVpc
     Type: AWS::EC2::EIP
     Properties:
       Domain: VPC
+
   PublicRouteTable:
+    Condition: CreateVpc
     Type: AWS::EC2::RouteTable
     DependsOn: VPC
     Properties:
-      VpcId: !Ref VPC
+      VpcId:
+        Ref: VPC
       Tags:
       - Key: Name
-        Value: !Join [ "", [ !Ref "AWS::StackName", "-public" ] ]
+        Value:
+          Fn::Sub: "${AWS::StackName}-public"
+
   PublicRoute:
+    Condition: CreateVpc
     Type: AWS::EC2::Route
     DependsOn:
     - PublicRouteTable
     - InternetGateway
     Properties:
-      RouteTableId: !Ref PublicRouteTable
+      RouteTableId:
+        Ref: PublicRouteTable
       DestinationCidrBlock: 0.0.0.0/0
-      GatewayId: !Ref InternetGateway
+      GatewayId:
+        Ref: InternetGateway
+
   PublicSubnetRouteTableAssociation1:
+    Condition: CreateVpc
     Type: AWS::EC2::SubnetRouteTableAssociation
     DependsOn:
     - PublicSubnet1
     - PublicRouteTable
     Properties:
-      SubnetId: !Ref PublicSubnet1
-      RouteTableId: !Ref PublicRouteTable
+      SubnetId:
+        Ref: PublicSubnet1
+      RouteTableId:
+        Ref: PublicRouteTable
+
   PublicSubnetRouteTableAssociation2:
+    Condition: CreateVpc
     Type: AWS::EC2::SubnetRouteTableAssociation
     DependsOn:
     - PublicSubnet2
     - PublicRouteTable
     - GatewayToInternet
     Properties:
-      SubnetId: !Ref PublicSubnet2
-      RouteTableId: !Ref PublicRouteTable
+      SubnetId:
+        Ref: PublicSubnet2
+      RouteTableId:
+        Ref: PublicRouteTable
+
   PublicSubnetRouteTableAssociation3:
+    Condition: CreateVpc
     Type: AWS::EC2::SubnetRouteTableAssociation
     DependsOn:
     - PublicSubnet3
     - PublicRouteTable
     - GatewayToInternet
     Properties:
-      SubnetId: !Ref PublicSubnet3
-      RouteTableId: !Ref PublicRouteTable
+      SubnetId:
+        Ref: PublicSubnet3
+      RouteTableId:
+        Ref: PublicRouteTable
+
   PrivateSubnet1:
+    Condition: CreateVpc
     Type: AWS::EC2::Subnet
     DependsOn: VPC
     Properties:
-      VpcId: !Ref VPC
-      AvailabilityZone: !Join [ "", [ !Ref "AWS::Region", !Ref AvailabilityZone1 ] ]
-      CidrBlock: !Ref PrivateSubnetCidrBlock1
+      VpcId:
+        Ref: VPC
+      AvailabilityZone:
+        Fn::Sub: "${AWS::Region}${AvailabilityZone1}"
+      CidrBlock:
+        Ref: PrivateSubnetCidrBlock1
       Tags:
       - Key: Name
-        Value: !Join [ "", [ !Ref "AWS::StackName", "-private-az1" ] ]
+        Value:
+          Fn::Sub: "${AWS::StackName}-private-az1"
+
   PrivateSubnet2:
+    Condition: CreateVpc
     Type: AWS::EC2::Subnet
     DependsOn: VPC
     Properties:
-      VpcId: !Ref VPC
-      AvailabilityZone: !Join [ "", [ !Ref "AWS::Region", !Ref AvailabilityZone2 ] ]
-      CidrBlock: !Ref PrivateSubnetCidrBlock2
+      VpcId:
+        Ref: VPC
+      AvailabilityZone:
+        Fn::Sub: "${AWS::Region}${AvailabilityZone2}"
+      CidrBlock:
+        Ref: PrivateSubnetCidrBlock2
       Tags:
       - Key: Name
-        Value: !Join [ "", [ !Ref "AWS::StackName", "-private-az2" ] ]
+        Value:
+          Fn::Sub: "${AWS::StackName}-private-az2"
+
   PrivateSubnet3:
+    Condition: CreateVpc
     Type: AWS::EC2::Subnet
     DependsOn: VPC
     Properties:
-      VpcId: !Ref VPC
-      AvailabilityZone: !Join [ "", [ !Ref "AWS::Region", !Ref AvailabilityZone3 ] ]
-      CidrBlock: !Ref PrivateSubnetCidrBlock3
+      VpcId:
+        Ref: VPC
+      AvailabilityZone:
+        Fn::Sub: "${AWS::Region}${AvailabilityZone3}"
+      CidrBlock:
+        Ref: PrivateSubnetCidrBlock3
       Tags:
       - Key: Name
-        Value: !Join [ "", [ !Ref "AWS::StackName", "-private-az3" ] ]
+        Value:
+          Fn::Sub: "${AWS::StackName}-private-az3"
+
   PrivateRouteTable:
+    Condition: CreateVpc
     Type: AWS::EC2::RouteTable
     DependsOn: VPC
     Properties:
-      VpcId: !Ref VPC
+      VpcId:
+        Ref: VPC
       Tags:
       - Key: Name
-        Value: !Join [ "", [ !Ref "AWS::StackName", "-private" ] ]
+        Value:
+          Fn::Sub: "${AWS::StackName}-private"
+
   PrivateRoute:
+    Condition: CreateVpc
     DependsOn:
     - PrivateRouteTable
     - NatGateway
@@ -641,32 +767,46 @@ Resources:
         Ref: PrivateRouteTable
       DestinationCidrBlock: 0.0.0.0/0
       NatGatewayId:
-        Ref: NatGateway        
+        Ref: NatGateway
+
   PrivateSubnetRouteTableAssociation1:
+    Condition: CreateVpc
     Type: AWS::EC2::SubnetRouteTableAssociation
     DependsOn:
     - PrivateSubnet1
     - PrivateRouteTable
     Properties:
-      SubnetId: !Ref PrivateSubnet1
-      RouteTableId: !Ref PrivateRouteTable
+      SubnetId:
+        Ref: PrivateSubnet1
+      RouteTableId:
+        Ref: PrivateRouteTable
+
   PrivateSubnetRouteTableAssociation2:
+    Condition: CreateVpc
     Type: AWS::EC2::SubnetRouteTableAssociation
     DependsOn:
     - PrivateSubnet2
     - PrivateRouteTable
     Properties:
-      SubnetId: !Ref PrivateSubnet2
-      RouteTableId: !Ref PrivateRouteTable
+      SubnetId:
+        Ref: PrivateSubnet2
+      RouteTableId:
+        Ref: PrivateRouteTable
+
   PrivateSubnetRouteTableAssociation3:
+    Condition: CreateVpc
     Type: AWS::EC2::SubnetRouteTableAssociation
     DependsOn:
     - PrivateSubnet3
     - PrivateRouteTable
     Properties:
-      SubnetId: !Ref PrivateSubnet3
-      RouteTableId: !Ref PrivateRouteTable
+      SubnetId:
+        Ref: PrivateSubnet3
+      RouteTableId:
+        Ref: PrivateRouteTable
+
   S3VpcEndpoint:
+    Condition: CreateVpc
     Type: AWS::EC2::VPCEndpoint
     DependsOn:
     - VPC
@@ -680,28 +820,36 @@ Resources:
           Resource: "*"
           Principal: "*"
       RouteTableIds:
-      - !Ref PrivateRouteTable
-      - !Ref PublicRouteTable
-      ServiceName: !Join [ "", [ com.amazonaws., !Ref "AWS::Region", .s3 ] ]
-      VpcId: !Ref VPC
+      - Ref: PrivateRouteTable
+      - Ref: PublicRouteTable
+      ServiceName:
+        Fn::Sub: "com.amazonaws.${AWS::Region}.s3"
+      VpcId:
+        Ref: VPC
 
   # Public Network ACL
   PublicNetworkAcl:
+    Condition: CreateVpc
     Type: AWS::EC2::NetworkAcl
     DependsOn: VPC
     Properties:
-      VpcId: !Ref VPC
+      VpcId:
+        Ref: VPC
       Tags:
       - Key: Name
-        Value: !Join [ "", [ !Ref "AWS::StackName", "-public-acl" ] ]
+        Value:
+          Fn::Sub: "${AWS::StackName}-public-acl"
       
   # Public Network ACL Rules
   InboundPublicNetworkAclAllowAll:
+    Condition: CreateVpc
     Type: AWS::EC2::NetworkAclEntry
     DependsOn: PublicNetworkAcl
     Properties:
-      NetworkAclId: !Ref PublicNetworkAcl
-      RuleNumber: !Ref AllowAllInboundPublicRuleNumber
+      NetworkAclId:
+        Ref: PublicNetworkAcl
+      RuleNumber:
+        Ref: AllowAllInboundPublicRuleNumber
       Protocol: '-1'
       RuleAction: allow
       Egress: 'false'
@@ -711,11 +859,14 @@ Resources:
         To: '65535'
 
   OutboundPublicNetworkAclAllowAll:
+    Condition: CreateVpc
     Type: AWS::EC2::NetworkAclEntry
     DependsOn: PublicNetworkAcl
     Properties:
-      NetworkAclId: !Ref PublicNetworkAcl
-      RuleNumber: !Ref AllowAllOutboundPublicRuleNumber
+      NetworkAclId:
+        Ref: PublicNetworkAcl
+      RuleNumber:
+        Ref: AllowAllOutboundPublicRuleNumber
       Protocol: "-1"
       RuleAction: allow
       Egress: 'true'
@@ -726,49 +877,64 @@ Resources:
 
   # Public Subnet Association
   PublicSubnetNetworkAclAssociation1:
+    Condition: CreateVpc
     Type: AWS::EC2::SubnetNetworkAclAssociation
     DependsOn:
     - PublicSubnet1
     - PublicNetworkAcl
     Properties:
-      SubnetId: !Ref PublicSubnet1
-      NetworkAclId: !Ref PublicNetworkAcl
+      SubnetId:
+        Ref: PublicSubnet1
+      NetworkAclId:
+        Ref: PublicNetworkAcl
 
   PublicSubnetNetworkAclAssociation2:
+    Condition: CreateVpc
     Type: AWS::EC2::SubnetNetworkAclAssociation
     DependsOn:
     - PublicSubnet2
     - PublicNetworkAcl
     Properties:
-      SubnetId: !Ref PublicSubnet2
-      NetworkAclId: !Ref PublicNetworkAcl
+      SubnetId:
+        Ref: PublicSubnet2
+      NetworkAclId:
+        Ref: PublicNetworkAcl
 
   PublicSubnetNetworkAclAssociation3:
+    Condition: CreateVpc
     Type: AWS::EC2::SubnetNetworkAclAssociation
     DependsOn:
     - PublicSubnet3
     - PublicNetworkAcl
     Properties:
-      SubnetId: !Ref PublicSubnet3
-      NetworkAclId: !Ref PublicNetworkAcl
+      SubnetId:
+        Ref: PublicSubnet3
+      NetworkAclId:
+        Ref: PublicNetworkAcl
 
   # Private Network ACL
   PrivateNetworkAcl:
+    Condition: CreateVpc
     Type: AWS::EC2::NetworkAcl
     DependsOn: VPC
     Properties:
-      VpcId: !Ref VPC
+      VpcId:
+        Ref: VPC
       Tags:
       - Key: Name
-        Value: !Join [ "", [ !Ref "AWS::StackName", "-private-acl" ] ]
+        Value:
+          Fn::Sub: "${AWS::StackName}-private-acl"
       
   # Private Network ACL Rules
   InboundEphemeralPrivateNetworkAclAllowAll:
+    Condition: CreateVpc
     Type: AWS::EC2::NetworkAclEntry
     DependsOn: PrivateNetworkAcl
     Properties:
-      NetworkAclId: !Ref PrivateNetworkAcl
-      RuleNumber: !Ref AllowAllInboundPrivateRuleNumber
+      NetworkAclId:
+        Ref: PrivateNetworkAcl
+      RuleNumber:
+        Ref: AllowAllInboundPrivateRuleNumber
       Protocol: "-1"
       RuleAction: allow
       Egress: 'false'
@@ -778,11 +944,14 @@ Resources:
         To: '65535'
 
   OutboundPrivateNetworkAclAllowAll:
+    Condition: CreateVpc
     Type: AWS::EC2::NetworkAclEntry
     DependsOn: PrivateNetworkAcl
     Properties:
-      NetworkAclId: !Ref PrivateNetworkAcl
-      RuleNumber: !Ref AllowAllOutboundPrivateRuleNumber
+      NetworkAclId:
+        Ref: PrivateNetworkAcl
+      RuleNumber:
+        Ref: AllowAllOutboundPrivateRuleNumber
       Protocol: "-1"
       RuleAction: allow
       Egress: 'true'
@@ -793,64 +962,81 @@ Resources:
 
   # Private Subnet Associations
   PrivateSubnetNetworkAclAssociation1:
+    Condition: CreateVpc
     Type: AWS::EC2::SubnetNetworkAclAssociation
     DependsOn:
     - PrivateSubnet1
     - PrivateNetworkAcl
     Properties:
       SubnetId:
-        !Ref PrivateSubnet1
+        Ref: PrivateSubnet1
       NetworkAclId:
-        !Ref PrivateNetworkAcl
+        Ref: PrivateNetworkAcl
 
   PrivateSubnetNetworkAclAssociation2:
+    Condition: CreateVpc
     Type: AWS::EC2::SubnetNetworkAclAssociation
     DependsOn:
     - PrivateSubnet2
     - PrivateNetworkAcl
     Properties:
-      SubnetId: !Ref PrivateSubnet2
-      NetworkAclId: !Ref PrivateNetworkAcl
+      SubnetId:
+        Ref: PrivateSubnet2
+      NetworkAclId:
+        Ref: PrivateNetworkAcl
 
   PrivateSubnetNetworkAclAssociation3:
+    Condition: CreateVpc
     Type: AWS::EC2::SubnetNetworkAclAssociation
     DependsOn:
     - PrivateSubnet3
     - PrivateNetworkAcl
     Properties:
-      SubnetId: !Ref PrivateSubnet3
-      NetworkAclId: !Ref PrivateNetworkAcl
+      SubnetId:
+        Ref: PrivateSubnet3
+      NetworkAclId:
+        Ref: PrivateNetworkAcl
 
   # Security Groups
   InternalAccessSecurityGroup:
+    Condition: CreateVpc
     Type: AWS::EC2::SecurityGroup
     DependsOn: VPC
     Properties:
       GroupDescription: Instance to Instance Access in VPC
-      VpcId: !Ref VPC
+      VpcId:
+        Ref: VPC
       Tags:
       - Key: Name
-        Value: !Join [ "", [ !Ref "AWS::StackName", "-instance-to-instance" ] ]
+        Value:
+          Fn::Sub: "${AWS::StackName}-instance-to-instance"
 
   InternalAccessSecurityGroupIngress:
+    Condition: CreateVpc
     Type: AWS::EC2::SecurityGroupIngress
     DependsOn: InternalAccessSecurityGroup
     Properties:
-      GroupId: !Ref InternalAccessSecurityGroup
+      GroupId:
+        Ref: InternalAccessSecurityGroup
       IpProtocol: "-1"
-      SourceSecurityGroupId: !Ref InternalAccessSecurityGroup
+      SourceSecurityGroupId:
+        Ref: InternalAccessSecurityGroup
 
   RemoteAccessSecurityGroup:
+    Condition: CreateVpc
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Instance Access over VPN/Direct Connect
-      VpcId: !Ref VPC
+      VpcId:
+        Ref: VPC
       Tags:
       - Key: Name
-        Value: !Join [ "", [ !Ref "AWS::StackName", "-remote-to-instance" ] ]
+        Value:
+          Fn::Sub: "${AWS::StackName}-remote-to-instance"
       SecurityGroupIngress:
       - IpProtocol: "-1"
-        CidrIp: !Ref RemoteCidrForSecurityGroup
+        CidrIp:
+          Ref: RemoteCidrForSecurityGroup
       SecurityGroupEgress:
       - IpProtocol: "-1"
         CidrIp: 0.0.0.0/0
@@ -870,6 +1056,62 @@ Outputs:
     Value:
       Fn::GetAtt: Elb.CanonicalHostedZoneNameID
 
+  VpcId:
+    Condition: CreateVpc
+    Export:
+      Name:
+        Fn::Sub: "${AWS::StackName}-VpcId"
+    Value:
+      Ref: VPC
+
+  PrivateSubnet1:
+    Condition: CreateVpc
+    Export:
+      Name:
+        Fn::Sub: "${AWS::StackName}-PrivateSubnet1"
+    Value:
+      Ref: PrivateSubnet1
+
+  PrivateSubnet2:
+    Condition: CreateVpc
+    Export:
+      Name:
+        Fn::Sub: "${AWS::StackName}-PrivateSubnet2"
+    Value:
+      Ref: PrivateSubnet2
+
+  PrivateSubnet3:
+    Condition: CreateVpc
+    Export:
+      Name:
+        Fn::Sub: "${AWS::StackName}-PrivateSubnet3"
+    Value:
+      Ref: PrivateSubnet3
+
+  PublicSubnet1:
+    Condition: CreateVpc
+    Export:
+      Name:
+        Fn::Sub: "${AWS::StackName}-PublicSubnet1"
+    Value:
+      Ref: PublicSubnet1
+
+  PublicSubnet2:
+    Condition: CreateVpc
+    Export:
+      Name:
+        Fn::Sub: "${AWS::StackName}-PublicSubnet2"
+    Value:
+      Ref: PublicSubnet2
+
+  PublicSubnet3:
+    Condition: CreateVpc
+    Export:
+      Name:
+        Fn::Sub: "${AWS::StackName}-PublicSubnet3"
+    Value:
+      Ref: PublicSubnet3
+
 Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:
@@ -884,6 +1126,11 @@ Metadata:
       - InstanceType
       - InstanceRootVolumeSize
       - CookbookUrl
+      - NewVpc
+      - VpcId
+      - SubnetIdHost
+      - SubnetIdLoadBalancer
+
     - Label:
         default: Remote Access
       Parameters:
