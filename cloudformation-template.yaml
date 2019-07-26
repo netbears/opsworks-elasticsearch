@@ -353,7 +353,10 @@ Resources:
       DefaultSubnetId:
         Fn::If:
           - CreateVpc
-          - Ref: PrivateSubnet1
+          - Fn::If:
+            - PublicHosts
+            - Ref: PublicSubnet1
+            - Ref: PrivateSubnet1
           - Ref: SubnetIdHost
       VpcId:
         Fn::If:
