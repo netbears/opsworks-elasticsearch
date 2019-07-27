@@ -34,10 +34,6 @@ Parameters:
       - public-ip
     Description: It is recommended to not use public IPs for hosts, but you have the option to use public IPs as well if needed
 
-  NumberOfNodes:
-    Type: Number
-    Default: '3'
-
   InstanceType:
     Type: String
     Default: 'i3.large'
@@ -73,6 +69,20 @@ Parameters:
   SubnetIdLoadBalancer:
     Type: List<AWS::EC2::Subnet::Id>
     Description: Setting takes effect only if CreateVpc is set to "existing" (specify at least 2)
+
+  SslLoadBalancer:
+    Type: String
+    Description: SSL ARN from Certificate Manager
+    Default: arn:aws:acm:us-east-1:359360911388:certificate/0fbec0ab-69ea-46ab-bb0f-aecd359b4621
+
+  DnsZone:
+    Type: AWS::Route53::HostedZone::Id
+    Description: Route53 hosted zone in which to place dns record
+    Default: Z37W7PCK0HCQPS
+
+  DnsRecord:
+    Type: String
+    Default: kibana.aws.netbears.com
 
   # Subnets
   VPCSubnetCidrBlock:
@@ -417,6 +427,13 @@ Resources:
         - InstancePort: 9300
           LoadBalancerPort: 9300
           Protocol: TCP
+        - InstancePort: 5601
+          LoadBalancerPort: 443
+          Protocol: HTTPS
+          PolicyNames:
+            - Fn::Sub: ${AWS::StackName}
+          SSLCertificateId:
+            Ref: SslLoadBalancer
       Scheme:
         Fn::If:
           - IsExternal
@@ -438,6 +455,9 @@ Resources:
               - Ref: PrivateSubnet2
               - Ref: PrivateSubnet3
           - Ref: SubnetIdLoadBalancer
+      ConnectionDrainingPolicy:
+        Enabled: 'true'
+        Timeout: '300'
       LBCookieStickinessPolicy:
         - CookieExpirationPeriod: 600
           PolicyName:
@@ -1061,6 +1081,27 @@ Resources:
       - IpProtocol: "-1"
         CidrIp: 0.0.0.0/0
 
+  Route53Record:
+    Type: AWS::Route53::RecordSetGroup
+    Properties:
+      HostedZoneId:
+        Ref: DnsZone
+      Comment: 
+        Fn::Sub: Route53-record-for-Kibana
+      RecordSets:
+      - Name:
+          Ref: DnsRecord
+        Type: A
+        AliasTarget:
+          HostedZoneId: 
+            Fn::GetAtt:
+              - Elb
+              - CanonicalHostedZoneNameID
+          DNSName: 
+            Fn::GetAtt:
+              - Elb
+              - DNSName
+
 Outputs:
   DNSName:
     Export:
@@ -1142,7 +1183,6 @@ Metadata:
       - OpsWorksStackName
       - SnapshotBucketName
       - LoadBalancerType
-      - NumberOfNodes
       - InstanceType
       - InstanceRootVolumeSize
       - CookbookUrl
@@ -1151,6 +1191,9 @@ Metadata:
       - SubnetIdHost
       - SubnetIdLoadBalancer
       - HostType
+      - SslLoadBalancer
+      - DnsRecord
+      - DnsZone
 
     - Label:
         default: Remote Access
