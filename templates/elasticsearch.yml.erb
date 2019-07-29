@@ -19,7 +19,7 @@ cluster.name: <%= node['elasticsearch']['cluster_name'] %>
 # ------------------------------------ Default Indexes ------------------------------------
 #
 #
-action.auto_create_index: .monitoring*,.watches,.triggered_watches,.watcher-history*,.ml*
+action.auto_create_index: true
 #
 #
 # ------------------------------------ Security ------------------------------------
