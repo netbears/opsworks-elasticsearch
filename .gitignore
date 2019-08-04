@@ -2,3 +2,5 @@
 *.gz
 
 event
+
+\.env

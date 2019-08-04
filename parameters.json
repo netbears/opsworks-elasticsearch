@@ -1,0 +1,54 @@
+[
+  {
+    "ParameterKey": "CookbookUrl",
+    "ParameterValue": "${CookbookUrl}"
+  },
+  {
+    "ParameterKey": "ClusterName",
+    "ParameterValue": "${ClusterName}"
+  },
+  {
+    "ParameterKey": "SnapshotBucketName",
+    "ParameterValue": "${SnapshotBucketName}"
+  },
+  {
+    "ParameterKey": "LoadBalancerType",
+    "ParameterValue": "${LoadBalancerType}"
+  },
+  {
+    "ParameterKey": "HostType",
+    "ParameterValue": "${HostType}"
+  },
+  {
+    "ParameterKey": "InstanceType",
+    "ParameterValue": "${InstanceType}"
+  },
+  {
+    "ParameterKey": "InstanceRootVolumeSize",
+    "ParameterValue": "${InstanceRootVolumeSize}"
+  },
+  {
+    "ParameterKey": "VpcId",
+    "ParameterValue": "${VpcId}"
+  },
+  {
+    "ParameterKey": "SubnetIdHost",
+    "ParameterValue": "${SubnetIdHost}"
+  },
+  {
+    "ParameterKey": "SubnetIdLoadBalancer",
+    "ParameterValue": "${SubnetIdLoadBalancer}"
+  },
+  {
+    "ParameterKey": "SslLoadBalancer",
+    "ParameterValue": "${SslLoadBalancer}"
+  },
+  {
+    "ParameterKey": "DnsZone",
+    "ParameterValue": "${DnsZone}"
+  },
+  {
+    "ParameterKey": "DnsRecord",
+    "ParameterValue": "${DnsRecord}"
+  }
+]
