@@ -434,19 +434,26 @@ Resources:
               - DNSName
 
 Outputs:
-  DNSName:
+  KibanaUrl:
     Export:
       Name:
-        Fn::Sub: ${AWS::StackName}-DNSName
+        Fn::Sub: "${AWS::StackName}-KibanaUrl"
     Value:
-      Fn::GetAtt: Elb.DNSName
+      Fn::Sub: "https://${DnsRecord}/app/kibana"
 
-  CanonicalHostedZoneNameID:
+  OpsWorksStackId:
     Export:
       Name:
-        Fn::Sub: ${AWS::StackName}-CanonicalHostedZoneNameID
+        Fn::Sub: "${AWS::StackName}-OpsWorksStack"
     Value:
-      Fn::GetAtt: Elb.CanonicalHostedZoneNameID
+      Ref: OpsWorksStack
+
+  LayerId:
+    Export:
+      Name:
+        Fn::Sub: "${AWS::StackName}-Layer"
+    Value:
+      Ref: Layer
 
 Metadata:
   AWS::CloudFormation::Interface:
