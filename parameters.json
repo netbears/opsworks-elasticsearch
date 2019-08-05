@@ -8,10 +8,6 @@
     "ParameterValue": "${ClusterName}"
   },
   {
-    "ParameterKey": "SnapshotBucketName",
-    "ParameterValue": "${SnapshotBucketName}"
-  },
-  {
     "ParameterKey": "LoadBalancerType",
     "ParameterValue": "${LoadBalancerType}"
   },

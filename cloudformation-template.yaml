@@ -11,10 +11,6 @@ Parameters:
     Type: String
     Default: 'es'
 
-  SnapshotBucketName:
-    Type: String
-    Default: netbears-elasticsearch-backup-staging
-
   LoadBalancerType:
     Type: String
     Default: internal
@@ -206,8 +202,6 @@ Resources:
     Type: AWS::S3::Bucket
     DeletionPolicy: Retain
     Properties:
-      BucketName:
-        Ref: SnapshotBucketName
       PublicAccessBlockConfiguration:
         BlockPublicAcls: True
         BlockPublicPolicy: True
@@ -250,7 +244,7 @@ Resources:
               "region": "${AWS::Region}",
               "cluster_name": "${ClusterName}",
               "discovery_ec2_groups": "${Ec2SecurityGroup.GroupId}",
-              "bucket_snapshot_name": "${SnapshotBucketName}",
+              "bucket_snapshot_name": "${SnapshotS3Bucket}",
               "cluster_initial_master_nodes": "elasticsearch-initial-1"
             },
             "cloudwatch": {
@@ -462,7 +456,6 @@ Metadata:
         default: ElasticSearch
       Parameters:
       - ClusterName
-      - SnapshotBucketName
       - LoadBalancerType
       - InstanceType
       - InstanceRootVolumeSize
