@@ -39,9 +39,9 @@ delete_stack:
 		--profile ${AwsProfile}
 setup:
 	$(SET_STACK_ID)
-	DEPLOYMENT=`aws --profile $(AwsProfile) opsworks create-deployment --stack-id ${STACK_ID} --command Name=update_custom_cookbooks --output text`; \
+	DEPLOYMENT=`aws --profile $(AwsProfile) opsworks create-deployment --stack-id ${STACK_ID} --command Name=update_custom_cookbooks --output text --region us-east-1`; \
 	echo $$DEPLOYMENT; \
-	aws --profile $(AwsProfile) opsworks wait deployment-successful --deployment-ids $$DEPLOYMENT
-	DEPLOYMENT=`aws --profile $(AwsProfile) opsworks create-deployment --stack-id ${STACK_ID} --command Name=setup --output text`; \
+	aws --profile $(AwsProfile) opsworks wait deployment-successful --deployment-ids $$DEPLOYMENT --region us-east-1
+	DEPLOYMENT=`aws --profile $(AwsProfile) opsworks create-deployment --stack-id ${STACK_ID} --command Name=setup --output text --region us-east-1`; \
 	echo $$DEPLOYMENT; \
-	aws --profile $(AwsProfile) opsworks wait deployment-successful --deployment-ids $$DEPLOYMENT
+	aws --profile $(AwsProfile) opsworks wait deployment-successful --deployment-ids $$DEPLOYMENT --region us-east-1
