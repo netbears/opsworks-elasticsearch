@@ -1,11 +1,11 @@
-Description: Launch ElasticSearch opsworks stack within its own VPC or an existing VPC
+Description: Launch ElasticSearch opsworks stack within an existing VPC
 
 Parameters:
   
   #ElasticSearch
   CookbookUrl:
     Type: String
-    Default: 'https://github.com/netbears/opsworks-elasticsearch/releases/download/v1.0.0/cookbooks-v1.0.0.tar.gz'
+    Default: 'https://github.com/netbears/opsworks-elasticsearch/releases/download/v1.1.0/cookbooks-v1.1.0.tar.gz'
 
   ClusterName:
     Type: String
