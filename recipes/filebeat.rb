@@ -3,6 +3,8 @@
 instance = search('aws_opsworks_instance', 'self:true').first
 hostname = instance['private_ip']
 
+hostname = node['filebeat']['logs']['hostname'] if node['filebeat']['logs']['external'] == 'true'
+
 directory "#{node['filebeat']['conf_path']}/" do
   owner 'root'
   group 'root'
@@ -44,7 +46,7 @@ end
 
 execute 'setup_filebeat' do
   command <<-BASH
-    filebeat setup
+    filebeat setup || true
   BASH
 end
 

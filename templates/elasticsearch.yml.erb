@@ -93,8 +93,11 @@ http.port: <%= node['elasticsearch']['http_port'] %>
 #
 # Prevent the "split brain" by configuring the majority of nodes (total number of master-eligible nodes / 2 + 1):
 #
-<% if @initial_node != "Empty" -%>
-cluster.initial_master_nodes: <%= node['elasticsearch']['cluster_initial_master_nodes'] %>
+<% if @initial_master_nodes && !@initial_master_nodes.empty? -%>
+cluster.initial_master_nodes:
+<% @initial_master_nodes.each do |node| %>
+  - <%= node %>
+<% end %>
 <% end -%>
 
 discovery.seed_providers: <%= node['elasticsearch']['seed_providers'] %>

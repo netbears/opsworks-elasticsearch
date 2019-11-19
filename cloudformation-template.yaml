@@ -47,8 +47,8 @@ Parameters:
     Description: VPC to deploy the stack in
 
   SubnetIdHost:
-    Type: AWS::EC2::Subnet::Id
-    Description: Subnets for the hosts
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: Subnets for the hosts (specify at least 2)
 
   SubnetIdLoadBalancer:
     Type: List<AWS::EC2::Subnet::Id>
@@ -65,6 +65,32 @@ Parameters:
   DnsRecord:
     Type: String
 
+  DeployOpsWorksInstances:
+    Type: String
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
+
+  FilebeatNumberShards:
+    Type: String
+    Default: '1'
+
+  FilebeatLogsExternal:
+    Type: String
+    Default: 'true'
+    AllowedValues:
+      - 'true'
+      - 'false'
+
+  FilebeatLogsHostname:
+    Type: String
+    Default: ''
+
+  Environment:
+    Type: String
+    Default: UTILITIES
+
 Conditions:
   IsExternal:
     Fn::Equals:
@@ -75,6 +101,11 @@ Conditions:
     Fn::Equals:
       - Ref: HostType
       - public-ip
+
+  LaunchOpsWorksInstances:
+    Fn::Equals:
+      - Ref: DeployOpsWorksInstances
+      - 'true'
 
 Resources:
   ServiceRole:
@@ -148,6 +179,29 @@ Resources:
                   - 'logs:*'
                 Resource:
                   - '*'
+        - PolicyName:
+            Fn::Sub: ${AWS::StackName}-ElbListAll
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'elasticloadbalancing:List*'
+                  - 'elasticloadbalancing:Describe*'
+                  - 'elasticloadbalancing:Get*'
+                Resource:
+                  - '*'
+        - PolicyName:
+            Fn::Sub: ${AWS::StackName}-ElbModifyTg
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'elasticloadbalancing:RegisterTargets'
+                  - 'elasticloadbalancing:DeregisterTargets'
+                Resource:
+                  - Ref: TargetGroup9200
+                  - Ref: TargetGroup9300
+                  - Ref: TargetGroup5601
 
   InstanceProfile:
     Type: AWS::IAM::InstanceProfile
@@ -171,31 +225,6 @@ Resources:
         - IpProtocol: udp
           FromPort: 0
           ToPort: 65535
-          CidrIp: 0.0.0.0/0
-
-  AlbSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription:
-        Fn::Sub: ${AWS::StackName}-Sg
-      VpcId:
-        Ref: VpcId
-      SecurityGroupIngress:
-        - IpProtocol: tcp
-          FromPort: 80
-          ToPort: 80
-          CidrIp: 0.0.0.0/0
-        - IpProtocol: tcp
-          FromPort: 443
-          ToPort: 443
-          CidrIp: 0.0.0.0/0
-        - IpProtocol: tcp
-          FromPort: 9200
-          ToPort: 9200
-          CidrIp: 0.0.0.0/0
-        - IpProtocol: tcp
-          FromPort: 5601
-          ToPort: 5601
           CidrIp: 0.0.0.0/0
 
   SnapshotS3Bucket:
@@ -231,7 +260,7 @@ Resources:
         Url:
           Ref: CookbookUrl
       DefaultSubnetId:
-        Ref: SubnetIdHost
+        Fn::Select: [ 0, Ref: SubnetIdHost ]
       VpcId:
         Ref: VpcId
       UseOpsworksSecurityGroups: true
@@ -242,13 +271,31 @@ Resources:
           {
             "elasticsearch": {
               "region": "${AWS::Region}",
+              "environment": "${Environment}",
               "cluster_name": "${ClusterName}",
               "discovery_ec2_groups": "${Ec2SecurityGroup.GroupId}",
               "bucket_snapshot_name": "${SnapshotS3Bucket}",
-              "cluster_initial_master_nodes": "elasticsearch-initial-1"
+              "cluster_initial_master_nodes": [
+                "elasticsearch-initial-1"
+              ]
+            },
+            "filebeat": {
+              "number_of_shards": "${FilebeatNumberShards}",
+              "logs": {
+                "external": "${FilebeatLogsExternal}",
+                "hostname": "${FilebeatLogsHostname}"
+              }
             },
             "cloudwatch": {
               "region": "${AWS::Region}"
+            },
+            "nlb": {
+              "register": "true",
+              "target_groups": {
+                "9200": "${TargetGroup9200}",
+                "9300": "${TargetGroup9300}",
+                "5601": "${TargetGroup5601}"
+              }
             }
           }
       Tags:
@@ -261,56 +308,141 @@ Resources:
         - Key: MaintainerEmail
           Value: support@netbears.com
 
-  Elb:
-    Type: AWS::ElasticLoadBalancing::LoadBalancer
-    DependsOn: Layer
-    Properties:
-      HealthCheck:
-        HealthyThreshold: 2
-        Interval: 10
-        Target: HTTP:9200/
-        Timeout: 5
-        UnhealthyThreshold: 2
-      Listeners:
-        - InstancePort: 9200
-          LoadBalancerPort: 9200
-          Protocol: TCP
-        - InstancePort: 5601
-          LoadBalancerPort: 80
-          Protocol: HTTP
-          PolicyNames:
-            - Fn::Sub: ${AWS::StackName}
-        - InstancePort: 5601
-          LoadBalancerPort: 5601
-          Protocol: HTTP
-          PolicyNames:
-            - Fn::Sub: ${AWS::StackName}
-        - InstancePort: 9300
-          LoadBalancerPort: 9300
-          Protocol: TCP
-        - InstancePort: 5601
-          LoadBalancerPort: 443
-          Protocol: HTTPS
-          PolicyNames:
-            - Fn::Sub: ${AWS::StackName}
-          SSLCertificateId:
-            Ref: SslLoadBalancer
+  Nlb:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties: 
+      IpAddressType: ipv4
+      LoadBalancerAttributes: 
+        - Key: load_balancing.cross_zone.enabled
+          Value: 'true'
+        - Key: deletion_protection.enabled
+          Value: 'true'
       Scheme:
         Fn::If:
           - IsExternal
           - internet-facing
           - internal
-      SecurityGroups:
-      - Ref: AlbSecurityGroup
-      Subnets:
+      Subnets: 
         Ref: SubnetIdLoadBalancer
-      ConnectionDrainingPolicy:
-        Enabled: 'true'
-        Timeout: '300'
-      LBCookieStickinessPolicy:
-        - CookieExpirationPeriod: 600
-          PolicyName:
-            Ref: AWS::StackName
+      Type: network
+
+  TargetGroup9200:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Port: 9200
+      Protocol: TCP
+      TargetGroupAttributes:
+        - Key: deregistration_delay.timeout_seconds
+          Value: 300
+      TargetType: instance
+      HealthCheckProtocol: TCP
+      HealthCheckPort: '9200'
+      HealthyThresholdCount: 5
+      UnhealthyThresholdCount: 5
+      HealthCheckTimeoutSeconds: 10
+      HealthCheckIntervalSeconds: 10
+      VpcId:
+        Ref: VpcId
+
+  TargetGroup9300:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Port: 9300
+      Protocol: TCP
+      TargetGroupAttributes:
+        - Key: deregistration_delay.timeout_seconds
+          Value: 300
+      TargetType: instance
+      HealthCheckProtocol: TCP
+      HealthCheckPort: '9300'
+      HealthyThresholdCount: 5
+      UnhealthyThresholdCount: 5
+      HealthCheckTimeoutSeconds: 10
+      HealthCheckIntervalSeconds: 10
+      VpcId:
+        Ref: VpcId
+
+  TargetGroup5601:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Port: 5601
+      Protocol: TCP
+      TargetGroupAttributes:
+        - Key: deregistration_delay.timeout_seconds
+          Value: 300
+      TargetType: instance
+      HealthCheckProtocol: TCP
+      HealthCheckPort: '5601'
+      HealthyThresholdCount: 5
+      UnhealthyThresholdCount: 5
+      HealthCheckTimeoutSeconds: 10
+      HealthCheckIntervalSeconds: 10
+      VpcId:
+        Ref: VpcId
+
+  Listener9200:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - TargetGroupArn:
+            Ref: TargetGroup9200
+          Type: forward
+      LoadBalancerArn:
+        Ref: Nlb
+      Port: 9200
+      Protocol: TCP
+
+  Listener9300:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - TargetGroupArn:
+            Ref: TargetGroup9300
+          Type: forward
+      LoadBalancerArn:
+        Ref: Nlb
+      Port: 9300
+      Protocol: TCP
+
+  Listener5601:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - TargetGroupArn:
+            Ref: TargetGroup5601
+          Type: forward
+      LoadBalancerArn:
+        Ref: Nlb
+      Port: 5601
+      Protocol: TCP
+
+
+  Listener80:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - TargetGroupArn:
+            Ref: TargetGroup5601
+          Type: forward
+      LoadBalancerArn:
+        Ref: Nlb
+      Port: 80
+      Protocol: TCP
+
+  Listener443:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - TargetGroupArn:
+            Ref: TargetGroup5601
+          Type: forward
+      LoadBalancerArn:
+        Ref: Nlb
+      Port: 443
+      Protocol: TLS
+      Certificates:
+        - CertificateArn:
+            Ref: SslLoadBalancer
 
   Layer:
     Type: AWS::OpsWorks::Layer
@@ -330,22 +462,16 @@ Resources:
       CustomRecipes:
         Setup:
           - 'elasticsearch_stack::setup'
+        Shutdown:
+          - 'elasticsearch_stack::shutdown'
       UseEbsOptimizedInstances: True
       CustomSecurityGroupIds:
         - Fn::GetAtt: Ec2SecurityGroup.GroupId
 
-  ElbLayer:
-    DependsOn: Elb
-    Type: AWS::OpsWorks::ElasticLoadBalancerAttachment
-    Properties: 
-      ElasticLoadBalancerName: 
-        Ref: Elb
-      LayerId: 
-        Ref: Layer
-
-  InstanceId1: 
+  InstanceIdSubnet1: 
     Type: AWS::OpsWorks::Instance
-    DependsOn: Elb
+    Condition: LaunchOpsWorksInstances
+    DependsOn: Nlb
     Properties: 
       StackId: 
         Ref: OpsWorksStack
@@ -355,50 +481,8 @@ Resources:
         Ref: InstanceType
       RootDeviceType: ebs
       SubnetId:
-        Ref: SubnetIdHost
+        Fn::Select: [ 0, Ref: SubnetIdHost ]
       Hostname: elasticsearch-initial-1
-      BlockDeviceMappings:
-        - DeviceName: ROOT_DEVICE
-          Ebs:
-            VolumeType: gp2
-            VolumeSize:
-              Ref: InstanceRootVolumeSize
-
-  InstanceId2:
-    Type: AWS::OpsWorks::Instance
-    DependsOn: Elb
-    Properties: 
-      StackId: 
-        Ref: OpsWorksStack
-      LayerIds: 
-        - Ref: Layer
-      InstanceType:
-        Ref: InstanceType
-      RootDeviceType: ebs
-      SubnetId:
-        Ref: SubnetIdHost
-      Hostname: elasticsearch-initial-2
-      BlockDeviceMappings:
-        - DeviceName: ROOT_DEVICE
-          Ebs:
-            VolumeType: gp2
-            VolumeSize:
-              Ref: InstanceRootVolumeSize
-
-  InstanceId3:
-    Type: AWS::OpsWorks::Instance
-    DependsOn: Elb
-    Properties: 
-      StackId: 
-        Ref: OpsWorksStack
-      LayerIds: 
-        - Ref: Layer
-      InstanceType:
-        Ref: InstanceType
-      RootDeviceType: ebs
-      SubnetId:
-        Ref: SubnetIdHost
-      Hostname: elasticsearch-initial-3
       BlockDeviceMappings:
         - DeviceName: ROOT_DEVICE
           Ebs:
@@ -420,11 +504,11 @@ Resources:
         AliasTarget:
           HostedZoneId: 
             Fn::GetAtt:
-              - Elb
-              - CanonicalHostedZoneNameID
+              - Nlb
+              - CanonicalHostedZoneID
           DNSName: 
             Fn::GetAtt:
-              - Elb
+              - Nlb
               - DNSName
 
 Outputs:
@@ -468,3 +552,4 @@ Metadata:
       - SslLoadBalancer
       - DnsRecord
       - DnsZone
+      - DeployOpsWorksInstances

@@ -36,4 +36,8 @@ include_recipe 'elasticsearch_stack::metricbeat'
 
 include_recipe 'elasticsearch_stack::filebeat'
 
+include_recipe 'elasticsearch_stack::elasticsearch_exporter'
+
 include_recipe 'ntp::default'
+
+include_recipe 'elasticsearch_stack::register_targets_nlb' if node['nlb']['register'] == 'true'

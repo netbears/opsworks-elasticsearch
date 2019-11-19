@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-default['kibana']['version']                             = '7.2.0'
+default['kibana']['version']                             = '7.4.2'
 default['kibana']['conf_path']                           = '/etc/kibana'
 default['kibana']['server_port']                         = '5601'
 default['kibana']['server_defaultRoute']                 = '/app/kibana'

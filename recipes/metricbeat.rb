@@ -31,7 +31,7 @@ execute 'extract_metricbeat' do
     printf 'N\n' | dpkg -i /tmp/metricbeat.deb
     metricbeat modules enable elasticsearch
     metricbeat modules enable kibana
-    metricbeat setup
+    metricbeat setup || true
   BASH
 end
 

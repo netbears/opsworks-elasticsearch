@@ -13,7 +13,7 @@ template "#{node['elasticsearch']['conf_path']}/elasticsearch.yml" do
   group 'elasticsearch'
   mode  '0660'
   variables private_ip: hostname,
-            initial_node: node['elasticsearch']['cluster_initial_master_nodes']
+            initial_master_nodes: node['elasticsearch']['cluster_initial_master_nodes']
   action :create
 end
 
@@ -56,9 +56,14 @@ directory "#{node['elasticsearch']['data_path']}/" do
   recursive true
 end
 
-execute "(printf 'y' | /usr/share/elasticsearch/bin/elasticsearch-plugin install discovery-ec2) || true"
-
-execute "(printf 'y' | /usr/share/elasticsearch/bin/elasticsearch-plugin install repository-s3) || true"
+(node['elasticsearch']['mandatory_plugins'] + node['elasticsearch']['custom_plugins']).each do |plugin|
+  run_cmd = "(printf 'y' | /usr/share/elasticsearch/bin/elasticsearch-plugin install #{plugin}) || true"
+  execute run_cmd do
+    user 'root'
+    environment 'HOME' => '/root'
+    cwd '/usr/share/elasticsearch/bin/'
+  end
+end
 
 template '/mount-ssd.sh' do
   source 'mount-ssd.sh.erb'

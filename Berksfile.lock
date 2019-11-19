@@ -7,7 +7,7 @@ GRAPH
   build-essential (8.0.4)
     mingw (>= 1.1)
     seven_zip (>= 0.0.0)
-  elasticsearch_stack (1.0.0)
+  elasticsearch_stack (1.1.0)
     build-essential (~> 8.0.3)
     logrotate (~> 2.2.0)
     ntp (~> 3.5.1)

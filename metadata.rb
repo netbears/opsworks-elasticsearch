@@ -5,7 +5,7 @@ maintainer       'NETBEARS'
 license          'All rights reserved'
 description      'Installs/Configures elasticsearch_stack'
 long_description 'Installs/Configures elasticsearch_stack'
-version          '1.0.0'
+version          '1.1.0'
 
 depends 'build-essential', '~> 8.0.3'
 depends 'poise-service', '~> 1.5.2'

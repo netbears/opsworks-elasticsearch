@@ -4,9 +4,9 @@
   logrotate_app app do
     path "/var/log/#{app}/*.log"
     options %w[missingok compress copytruncate notifempty]
-    frequency 'daily'
-    maxsize '100M'
-    rotate  30
+    frequency 'hourly'
+    maxsize '10M'
+    rotate  10
   end
 end
 
@@ -27,11 +27,11 @@ logrotate_app 'rsyslog' do
     '/var/log/messages'
   ]
   options %w[missingok compress copytruncate]
-  frequency 'daily'
+  frequency 'hourly'
   rotate 7
   su 'root syslog'
 end
 
 file '/etc/cron.d/logrotate' do
-  content ['MAILTO=""', '*/30 * * * * root /etc/cron.daily/logrotate', ''].join("\n")
+  content ['MAILTO=""', '*/30 * * * * root /etc/cron.hourly/logrotate', ''].join("\n")
 end

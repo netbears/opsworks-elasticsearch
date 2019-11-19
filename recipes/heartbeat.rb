@@ -29,7 +29,7 @@ end
 execute 'extract_heartbeat' do
   command <<-BASH
     printf 'N\n' | dpkg -i /tmp/heartbeat.deb
-    heartbeat setup
+    heartbeat setup || true
   BASH
 end
 

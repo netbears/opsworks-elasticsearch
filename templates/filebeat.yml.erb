@@ -78,7 +78,7 @@ filebeat.config.modules:
 #==================== Elasticsearch template setting ==========================
 
 setup.template.settings:
-  index.number_of_shards: 1
+  index.number_of_shards: <%= node['filebeat']['number_of_shards'] %>
   #index.codec: best_compression
   #_source.enabled: false
 
@@ -154,6 +154,8 @@ output.elasticsearch:
   #username: "elastic"
   #password: "changeme"
 
+  bulk_max_size: <%= node['filebeat']['bulk_max_size'] %>
+
 #----------------------------- Logstash output --------------------------------
 #output.logstash:
   # The Logstash hosts
@@ -176,6 +178,10 @@ output.elasticsearch:
 processors:
   - add_host_metadata: ~
   - add_cloud_metadata: ~
+  - add_fields:
+      target: ''
+      fields:
+        environment: <%= node['elasticsearch']['environment'] %>
 
 #================================ Logging =====================================
 
