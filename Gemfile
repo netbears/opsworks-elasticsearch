@@ -14,7 +14,7 @@ group :development do
   gem 'dotenv', '~> 2.2'
   gem 'kitchen-ec2', '~> 1.3.2'
   gem 'kitchen-sync', '~> 2.1'
-  gem 'rake', '~> 12.0'
+  gem 'rake', '~> 12.3'
   gem 'rubocop', '~> 0.47', require: false
   gem 'serverspec', '~> 2.38'
   gem 'test-kitchen', '~> 1.15'
